@@ -1,0 +1,12 @@
+{{ includes }}
+{{ static_vars }}
+
+{{ function_signature }} {
+{{ stack_vars }}
+{{ layers }}
+}
+{{ initialize_body }}
+{{ terminate_body }}
+{% if stateful %}
+{{ reset_body }}
+{% endif %}

@@ -1,0 +1,3 @@
+{{ term.signature }} {
+{% for var in term.vars %}free({{ var }});
+{% endfor %}}

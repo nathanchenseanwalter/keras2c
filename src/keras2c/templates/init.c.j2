@@ -1,0 +1,10 @@
+{{ init.signature }} {
+{% for arr in init.arrays %}
+static const float {{ arr.name }}_init[{{ arr.size }}] = {
+{% for val in arr.flat %}{{ "%+.8e"|format(val) }}f,{% if loop.index % 5 == 0 %}
+{% endif %}{% endfor %}
+};
+*{{ arr.name }} = (float*) malloc({{ arr.size }} * sizeof(float));
+memcpy(*{{ arr.name }}, {{ arr.name }}_init, {{ arr.size }} * sizeof(float));
+{% endfor %}
+}

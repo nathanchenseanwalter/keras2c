@@ -16,6 +16,8 @@ from keras2c.make_test_suite import make_test_suite
 from keras2c.types import Keras2CConfig
 import subprocess
 from .backend import keras
+from pathlib import Path
+from jinja2 import Environment, FileSystemLoader
 
 
 __author__ = "Rory Conlin"
@@ -23,6 +25,9 @@ __copyright__ = "Copyright 2020, Rory Conlin"
 __license__ = "MIT"
 __maintainer__ = "Rory Conlin, https://github.com/f0uriest/keras2c"
 __email__ = "wconlin@princeton.edu"
+
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), keep_trailing_newline=True)
 
 
 def model2c(model, function_name, malloc=False, verbose=True):
@@ -66,31 +71,30 @@ def model2c(model, function_name, malloc=False, verbose=True):
                                               key for key in malloc_vars.keys()])
     function_signature += ')'
 
-    init_sig, init_fun = gen_function_initialize(function_name, malloc_vars)
-    term_sig, term_fun = gen_function_terminate(function_name, malloc_vars)
-    reset_sig, reset_fun = gen_function_reset(function_name)
+    init = gen_function_initialize(function_name, malloc_vars)
+    term = gen_function_terminate(function_name, malloc_vars)
+    reset = gen_function_reset(function_name)
+
+    context = {
+        'includes': includes,
+        'static_vars': static_vars,
+        'function_signature': function_signature,
+        'stack_vars': stack_vars,
+        'layers': layers,
+        'stateful': stateful,
+        'init_sig': init['signature'],
+        'term_sig': term['signature'],
+        'reset_sig': reset['signature'],
+        'initialize_body': env.get_template('init.c.j2').render(init=init),
+        'terminate_body': env.get_template('terminate.c.j2').render(term=term),
+        'reset_body': env.get_template('reset.c.j2').render(reset=reset, function_name=function_name),
+    }
 
     with open(function_name + '.c', 'w') as source:
-        source.write(includes)
-        source.write(static_vars + '\n\n')
-        source.write(function_signature)
-        source.write(' { \n\n')
-        source.write(stack_vars)
-        source.write(layers)
-        source.write('\n } \n\n')
-        source.write(init_fun)
-        source.write(term_fun)
-        if stateful:
-            source.write(reset_fun)
+        source.write(env.get_template('main.c.j2').render(context))
 
     with open(function_name + '.h', 'w') as header:
-        header.write('#pragma once \n')
-        header.write('#include "./include/k2c_tensor_include.h" \n')
-        header.write(function_signature + '; \n')
-        header.write(init_sig + '; \n')
-        header.write(term_sig + '; \n')
-        if stateful:
-            header.write(reset_sig + '; \n')
+        header.write(env.get_template('header.h.j2').render(context))
     try:
         subprocess.run(['astyle', '-n', function_name + '.h'])
         subprocess.run(['astyle', '-n', function_name + '.c'])
@@ -111,16 +115,12 @@ def gen_function_reset(function_name):
     Returns:
         signature (str): declaration of the reset function
         function (str): definition of the reset function
+
     """
+    reset_sig = "void " + function_name + "_reset_states()"
+    return {"signature": reset_sig}
 
-    reset_sig = 'void ' + function_name + '_reset_states()'
 
-    reset_fun = reset_sig
-    reset_fun += ' { \n\n'
-    reset_fun += 'memset(&' + function_name + \
-                 '_states,0,sizeof(' + function_name + '_states)); \n'
-    reset_fun += "} \n\n"
-    return reset_sig, reset_fun
 
 
 def gen_function_initialize(function_name, malloc_vars):
@@ -138,25 +138,15 @@ def gen_function_initialize(function_name, malloc_vars):
     """
 
     init_sig = 'void ' + function_name + '_initialize('
-    init_sig += ','.join(['float** ' +
-                          key + ' \n' for key in malloc_vars.keys()])
+    init_sig += ','.join(['float** ' + key for key in malloc_vars.keys()])
     init_sig += ')'
 
-    init_fun = init_sig
-    init_fun += ' { \n\n'
+    arrays = []
     for key, value in malloc_vars.items():
         flat = value.flatten(order='C')
-        init_fun += 'static const float ' + key + '_init[' + str(flat.size) + '] = {\n'
-        for idx, val in enumerate(flat):
-            init_fun += f'{val:+.8e}f,'
-            if (idx + 1) % 5 == 0:
-                init_fun += '\n'
-        init_fun += '};\n'
-        init_fun += '*' + key + ' = (float*) malloc(' + str(flat.size) + ' * sizeof(float)); \n'
-        init_fun += 'memcpy(*' + key + ', ' + key + '_init, ' + str(flat.size) + ' * sizeof(float));\n'
-    init_fun += "} \n\n"
+        arrays.append({'name': key, 'flat': flat.tolist(), 'size': flat.size})
 
-    return init_sig, init_fun
+    return {'signature': init_sig, 'arrays': arrays}
 
 
 def gen_function_terminate(function_name, malloc_vars):
@@ -174,17 +164,10 @@ def gen_function_terminate(function_name, malloc_vars):
     """
 
     term_sig = 'void ' + function_name + '_terminate('
-    term_sig += ','.join(['float* ' +
-                          key for key in malloc_vars.keys()])
+    term_sig += ','.join(['float* ' + key for key in malloc_vars.keys()])
     term_sig += ')'
 
-    term_fun = term_sig
-    term_fun += ' { \n\n'
-    for key in malloc_vars.keys():
-        term_fun += "free(" + key + "); \n"
-    term_fun += "} \n\n"
-
-    return term_sig, term_fun
+    return {'signature': term_sig, 'vars': list(malloc_vars.keys())}
 
 
 def k2c(model, function_name, malloc=False, num_tests=10, verbose=True):

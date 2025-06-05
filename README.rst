@@ -50,9 +50,12 @@ It can also be used with a python environment in the following manner:
 .. code-block:: python
 
     from keras2c import k2c
-    k2c(model, function_name, malloc=False, num_tests=10, verbose=True)
+k2c(model, function_name, malloc=False, num_tests=10, verbose=True)
 
 For more information, see `Installation <https://f0uriest.github.io/keras2c/installation.html>`_ and  `Usage <https://f0uriest.github.io/keras2c/usage.html>`_
+
+Internally, keras2c now uses `Jinja2 <https://palletsprojects.com/p/jinja/>`_ templates
+to generate the C source files for your model and test suite.
 
 
 Supported Layers

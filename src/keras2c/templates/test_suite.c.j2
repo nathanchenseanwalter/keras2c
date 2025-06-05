@@ -1,0 +1,42 @@
+#include <stdio.h>
+#include <math.h>
+#include <time.h>
+#include "./include/k2c_include.h"
+#include "{{ function_name }}.h"
+float maxabs(k2c_tensor *tensor1, k2c_tensor *tensor2);
+struct timeval GetTimeStamp();
+
+{% for arr in arrays %}{{ arr }}
+{% endfor %}
+int main(){
+ float errors[{{ num_tests * num_outputs }}];
+ size_t num_tests = {{ num_tests }};
+ size_t num_outputs = {{ num_outputs }};
+{% for var in malloc_vars %} float* {{ var }};
+{% endfor %}
+ {{ function_name }}_initialize({% for var in malloc_vars %}&{{ var }}{% if not loop.last %}, {% endif %}{% endfor %});
+{% if stateful %} {{ function_name }}_reset_states();
+{% endif %} clock_t t0 = clock();
+{% for i in range(num_tests) %}{% if stateful and i == half %} {{ function_name }}_reset_states();
+{% endif %} {{ function_name }}({% for inp in model_inputs %}&test{{ i+1 }}_{{ inp }}_input, {% endfor %}{% for outp in model_outputs %}&c_{{ outp }}_test{{ i+1 }}, {% endfor %}{% for var in malloc_vars %}{{ var }}{% if not loop.last %}, {% endif %}{% endfor %});
+{% endfor %} clock_t t1 = clock();
+ printf("Average time over {{ num_tests }} tests: %e s \n", ((double)t1-t0)/(double)CLOCKS_PER_SEC/(double){{ num_tests }});
+{% for i in range(num_tests) %}{% for j in range(num_outputs) %} errors[{{ i * num_outputs + j }}] = maxabs(&keras_{{ model_outputs[j] }}_test{{ i+1 }}, &c_{{ model_outputs[j] }}_test{{ i+1 }});
+{% endfor %}{% endfor %} float maxerror = errors[0];
+ for(size_t i=1; i< num_tests*num_outputs;i++){
+  if (errors[i] > maxerror) {
+   maxerror = errors[i];}}
+ printf("Max absolute error for {{ num_tests }} tests: %e \n", maxerror);
+ {{ function_name }}_terminate({% for var in malloc_vars %}{{ var }}{% if not loop.last %}, {% endif %}{% endfor %});
+ if (maxerror > {{ tol }}) {
+  return 1;}
+ return 0;
+}
+
+float maxabs(k2c_tensor *tensor1, k2c_tensor *tensor2){
+    float x = 0;
+    float y = 0;
+    for(size_t i=0; i<tensor1->numel; i++){
+        y = fabsf(tensor1->array[i]-tensor2->array[i]);
+        if (y>x) {x=y;}}
+    return x;}
