@@ -20,7 +20,12 @@ Please cite `this paper <https://doi.org/10.1016/j.engappai.2021.104182>`_ if yo
 Quickstart
 **********
 
-For windows, make sure that you have gcc installed. We recommend CYGWIN with make and gcc
+On macOS, ensure the Xcode command line tools are installed so that ``make``
+and ``clang`` are available.  You can install them from a terminal with
+``xcode-select --install``.
+
+For Windows, ``make`` and ``gcc`` are not included by default.  Use
+MSYS2/MinGW or Cygwin to obtain these tools.
 
 After cloning the repo, install the necessary packages with ``pip install -r requirements.txt``.
 Alternatively, create a conda environment using ``conda env create -f environment.yml``.
